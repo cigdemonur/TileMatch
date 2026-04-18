@@ -10,7 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d67aa993906374cc1b00c6596f722ec0, type: 3}
-  m_Name: Level_New
+  m_Name: Level_Empty
   m_EditorClassIdentifier: 
   tiles: []
-  orders: []
+  orders:
+  - tileType: {fileID: 0}
+  - tileType: {fileID: 0}
