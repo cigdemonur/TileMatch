@@ -13,6 +13,4 @@ MonoBehaviour:
   m_Name: Level_Empty
   m_EditorClassIdentifier: 
   tiles: []
-  orders:
-  - tileType: {fileID: 0}
-  - tileType: {fileID: 0}
+  orders: []

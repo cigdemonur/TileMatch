@@ -12,5 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a2598cc50bc9645c192417815634c2ff, type: 3}
   m_Name: HotdogTile
   m_EditorClassIdentifier: 
-  typeName: Donut
+  typeName: Hotdog
   icon: {fileID: 2690274267995810836, guid: ee849d4885860403ab9d9cf211d2ea6c, type: 3}
