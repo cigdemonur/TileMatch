@@ -7,6 +7,5 @@ namespace TileMatch.Data
     {
         public string typeName;
         public Sprite icon;
-        public Color tintColor = Color.white;
     }
 }
