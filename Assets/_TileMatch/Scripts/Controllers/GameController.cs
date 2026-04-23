@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using TileMatch.Data;
 using TileMatch.Models;
+using TileMatch.Views;
 
 namespace TileMatch.Controllers
 {
@@ -30,6 +31,12 @@ namespace TileMatch.Controllers
         [SerializeField] private OrderController orderController;
         [SerializeField] private RackController rackController;
 
+        [Header("Views")]
+        [SerializeField] private BoardView boardView;
+        [SerializeField] private RackView rackView;
+        [SerializeField] private OrderView orderView;
+        [SerializeField] private GameView gameView;
+
         // Runtime models (created on start)
         public BoardModel Board { get; private set; }
         public RackModel Rack { get; private set; }
@@ -49,10 +56,39 @@ namespace TileMatch.Controllers
 
         private void Start()
         {
-            // TODO: create models (Board, Rack) using gameConfig
-            // TODO: hand models to subsystem controllers
-            // TODO: call boardController.SpawnBoard(levelData)
-            // TODO: call orderController.Initialize(levelData.orders, gameConfig.simultaneousOrders)
+            if (gameConfig == null || levelData == null)
+            {
+                Debug.LogError("GameController: missing GameConfig or LevelData.", this);
+                return;
+            }
+
+            // 1. Build runtime models
+            Board = new BoardModel();
+            Rack = new RackModel(gameConfig.rackCapacity);
+
+            // 2. Wire controllers
+            if (boardController != null) boardController.Bind(Board);
+            if (rackController != null) rackController.Bind(Rack);
+
+            // Subscribe BEFORE Initialize so the first batch of activated
+            // orders can still auto-collect from the (initially empty) rack.
+            if (orderController != null)
+            {
+                orderController.OnOrderActivated -= HandleOrderActivated;
+                orderController.OnOrderActivated += HandleOrderActivated;
+                orderController.Initialize(levelData.orders, gameConfig.simultaneousOrders);
+            }
+
+            // 3. Wire views
+            if (boardView != null) boardView.Bind(Board);
+            if (rackView != null) rackView.Bind(Rack);
+            if (gameView != null) gameView.Bind(this);
+
+            // 4. Spawn the board
+            if (boardController != null) boardController.SpawnBoard(levelData);
+
+            // 5. We are playing
+            SetState(GameState.Playing);
         }
 
         /// <summary>
@@ -61,10 +97,80 @@ namespace TileMatch.Controllers
         /// </summary>
         public void RouteTile(TileModel tile)
         {
-            // TODO: ask OrderController.FindMatchingOrder(tile.TileType)
-            // TODO: if match -> matchedOrder.Collect(); animate tile to order tray
-            // TODO: else -> Rack.TryAdd(tile); if false -> SetState(Fail)
-            // TODO: Board.RemoveTile(tile) (fire-and-forget)
+            if (tile == null || State != GameState.Playing) return;
+
+            // 1) Tap feedback on the view.
+            var tileView = boardView != null ? boardView.GetViewFor(tile) : null;
+            if (tileView != null) tileView.AnimateTap();
+
+            // 2) Try to match an active order first.
+            var match = orderController != null
+                ? orderController.FindMatchingOrder(tile.TileType)
+                : null;
+
+            if (match != null)
+            {
+                Vector3 target = orderView != null
+                    ? orderView.GetNextIconWorldPosition(match)
+                    : (tileView != null ? tileView.transform.position : Vector3.zero);
+
+                if (tileView != null)
+                {
+                    tileView.AnimateMoveToTarget(target, () =>
+                    {
+                        match.Collect();
+                        if (Board != null) Board.RemoveTile(tile);
+                    });
+                }
+                else
+                {
+                    match.Collect();
+                    if (Board != null) Board.RemoveTile(tile);
+                }
+                return;
+            }
+
+            // 3) No match — send to rack (triggers Fail if rack is full).
+            int rackSlot = rackController != null ? rackController.PeekNextFreeSlot() : -1;
+            Vector3 rackTarget = (rackSlot >= 0 && rackView != null)
+                ? rackView.GetSlotWorldPosition(rackSlot)
+                : (tileView != null ? tileView.transform.position : Vector3.zero);
+
+            if (tileView != null)
+            {
+                tileView.AnimateMoveToTarget(rackTarget, () =>
+                {
+                    if (rackController != null) rackController.TryAdd(tile);
+                    if (Board != null) Board.RemoveTile(tile);
+                });
+            }
+            else
+            {
+                if (rackController != null) rackController.TryAdd(tile);
+                if (Board != null) Board.RemoveTile(tile);
+            }
+        }
+
+        /// <summary>
+        /// Scan the rack for tiles that match a newly-active order and
+        /// auto-collect them. Called when OrderController promotes an order.
+        /// </summary>
+        private void HandleOrderActivated(OrderModel order)
+        {
+            if (order == null || Rack == null || rackController == null) return;
+
+            // Snapshot — TryRemove mutates the slot array.
+            for (int i = 0; i < Rack.Capacity && !order.IsComplete; i++)
+            {
+                var slotTile = Rack.Slots[i];
+                if (slotTile == null) continue;
+                if (!order.Matches(slotTile.TileType)) continue;
+
+                if (rackController.TryRemove(slotTile, out _))
+                {
+                    order.Collect();
+                }
+            }
         }
 
         public void SetState(GameState newState)
@@ -76,9 +182,15 @@ namespace TileMatch.Controllers
 
         public void RestartLevel()
         {
-            // TODO: Board.Clear(), Rack.Clear(), OrderController.Reset()
-            // TODO: boardController.SpawnBoard(levelData)
-            // TODO: SetState(GameState.Playing)
+            if (boardController != null) boardController.ClearBoard();
+            if (rackController != null) rackController.Reset();
+            if (orderController != null) orderController.Reset();
+
+            SetState(GameState.Playing);
+
+            if (boardController != null) boardController.SpawnBoard(levelData);
+            if (orderController != null)
+                orderController.Initialize(levelData.orders, gameConfig.simultaneousOrders);
         }
     }
 }

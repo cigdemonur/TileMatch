@@ -1,6 +1,8 @@
 using UnityEngine;
 using TileMatch.Data;
 using TileMatch.Models;
+using TileMatch.Pool;
+using TileMatch.Views;
 
 namespace TileMatch.Controllers
 {
@@ -15,11 +17,14 @@ namespace TileMatch.Controllers
         [SerializeField] private GameConfigSO gameConfig;
 
         [Header("Scene Refs")]
-        [Tooltip("Parent transform for all spawned TileView GameObjects.")]
+        [Tooltip("Parent transform for all spawned tile GameObjects.")]
         [SerializeField] private Transform tileParent;
 
-        [Tooltip("Temporary direct prefab reference. Will be replaced by TilePool.")]
-        [SerializeField] private GameObject tilePrefab;
+        [Tooltip("Pool that owns the tile prefab and recycles TileView instances.")]
+        [SerializeField] private TilePool tilePool;
+
+        [Tooltip("BoardView that maps models to views.")]
+        [SerializeField] private BoardView boardView;
 
         private BoardModel _board;
 
@@ -30,7 +35,8 @@ namespace TileMatch.Controllers
                 _board.OnTileRemoved -= HandleTileRemoved;
 
             _board = board;
-            _board.OnTileRemoved += HandleTileRemoved;
+            if (_board != null)
+                _board.OnTileRemoved += HandleTileRemoved;
         }
 
         /// <summary>
@@ -39,22 +45,54 @@ namespace TileMatch.Controllers
         /// </summary>
         public void SpawnBoard(LevelDataSO levelData)
         {
-            // TODO: for each TilePlacement in levelData.tiles:
-            //   - compute world pos = new Vector3(dotX * miniSquareSize, dotY * miniSquareSize, -layer * 0.01f)
-            //   - instantiate tilePrefab under tileParent (later: pool.Get())
-            //   - create new TileModel(tileType, new Vector2Int(dotX, dotY), layer)
-            //   - wire up TileView.Render(model) and TileController reference
-            //   - _board.AddTile(model)
-            // TODO: RefreshBlockedState() at the end
+            if (_board == null || levelData == null || gameConfig == null || tilePool == null)
+            {
+                Debug.LogError("BoardController.SpawnBoard: missing dependencies.", this);
+                return;
+            }
+
+            float s = gameConfig.miniSquareSize;
+
+            foreach (var placement in levelData.tiles)
+            {
+                if (placement.tileType == null) continue;
+
+                // 1. create model
+                var model = new TileModel(
+                    placement.tileType,
+                    new Vector2Int(placement.dotX, placement.dotY),
+                    placement.layer
+                );
+
+                // 2. get a TileView from the pool, position it
+                var view = tilePool.Get(tileParent);
+                view.transform.localPosition = DotToWorld(placement.dotX, placement.dotY, placement.layer, s);
+
+                // 3. bind controller (which binds view)
+                var controller = view.GetComponent<TileController>();
+                if (controller == null)
+                {
+                    Debug.LogError("Tile prefab is missing TileController.", view);
+                    continue;
+                }
+                controller.Bind(model);
+
+                // 4. register model + view + add to board (fires OnTileAdded if subscribed later)
+                if (boardView != null) boardView.RegisterView(model, view);
+                _board.AddTile(model);
+            }
+
+            RefreshBlockedState();
         }
 
         /// <summary>
-        /// Remove every tile from the board and return its view to the pool.
-        /// Used by GameController.RestartLevel.
+        /// Remove every tile from the board. BoardModel.Clear fires OnTileRemoved
+        /// per tile, and BoardView returns each view to the pool.
         /// </summary>
         public void ClearBoard()
         {
-            // TODO: _board.Clear(); -> OnTileRemoved will fire per tile; view must be returned to pool there
+            if (_board == null) return;
+            _board.Clear();
         }
 
         /// <summary>
@@ -65,12 +103,49 @@ namespace TileMatch.Controllers
         public void RefreshBlockedState()
         {
             if (_board == null) return;
+            var tiles = _board.Tiles;
+            int n = tiles.Count;
 
-            // TODO: for each tile A in _board.Tiles:
-            //         bool blocked = false;
-            //         for each tile B in _board.Tiles where B.Layer > A.Layer:
-            //             if B.Overlaps(A) { blocked = true; break; }
-            //         A.SetBlocked(blocked);
+            for (int i = 0; i < n; i++)
+            {
+                var a = tiles[i];
+                bool blocked = false;
+                for (int j = 0; j < n; j++)
+                {
+                    if (i == j) continue;
+                    var b = tiles[j];
+                    if (b.Layer > a.Layer && b.Overlaps(a))
+                    {
+                        blocked = true;
+                        break;
+                    }
+                }
+                a.SetBlocked(blocked);
+            }
+        }
+
+        private Vector3 DotToWorld(int dotX, int dotY, int layer, float s)
+        {
+            // X and Y spacing can differ if the tile sprite isn't square.
+            float sx = s * gameConfig.columnSpacingScale;
+            float sy = s;
+
+            // Centre board around origin so the camera doesn't need to offset.
+            float offsetX = (gameConfig.dotMapWidth - 1) * 0.5f * sx;
+            float offsetY = (gameConfig.dotMapHeight - 1) * 0.5f * sy;
+
+            // Depth rules (smaller Z = closer to camera = rendered on top):
+            //   - Higher layers pull closer to the camera so upper tiles cover lower ones.
+            //   - Within a layer, lower dotY pulls closer so front-row tiles cover the
+            //     3D shadow on the top edge of the tiles behind them (painter's algorithm).
+            // Layer step (0.1) is much larger than the per-row step (0.001) so layers
+            // always dominate dot-Y sorting.
+            float z = -layer * 0.1f + dotY * 0.001f;
+            // Pull tile visually down (or up) so the anchor dot sits at the sprite's
+            // visual center — gizmo dots are NOT shifted, only the tile render.
+            return new Vector3(dotX * sx - offsetX,
+                               dotY * sy - offsetY + gameConfig.tileYOffset,
+                               z);
         }
 
         private void HandleTileRemoved(TileModel tile)

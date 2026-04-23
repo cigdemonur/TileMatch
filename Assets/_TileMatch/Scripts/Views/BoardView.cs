@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TileMatch.Models;
+using TileMatch.Pool;
 
 namespace TileMatch.Views
 {
@@ -12,6 +13,10 @@ namespace TileMatch.Views
     /// </summary>
     public class BoardView : MonoBehaviour
     {
+        [Header("Pool")]
+        [Tooltip("TilePool to return views to when their model is removed.")]
+        [SerializeField] private TilePool tilePool;
+
         private BoardModel _board;
         private readonly Dictionary<TileModel, TileView> _views = new Dictionary<TileModel, TileView>();
 
@@ -47,10 +52,9 @@ namespace TileMatch.Views
             if (!_views.TryGetValue(tile, out var view)) return;
             _views.Remove(tile);
 
-            // TODO: view.AnimateTap();  -- already played by GameController before removal? decide
-            // TODO: return view to TilePool (deactivate + add back to pool queue)
-            //       for now, just deactivate so it disappears
-            if (view != null) view.gameObject.SetActive(false);
+            // GameController plays tap/move animations *before* calling Board.RemoveTile(),
+            // so by the time we get here the view is visually done. Just pool it.
+            ReturnToPool(view);
         }
 
         private void OnDisable()
@@ -62,8 +66,25 @@ namespace TileMatch.Views
         /// <summary>Clear everything — used on RestartLevel.</summary>
         public void Clear()
         {
-            // TODO: return every remaining TileView to the pool
+            foreach (var kv in _views)
+                ReturnToPool(kv.Value);
             _views.Clear();
+        }
+
+        private void ReturnToPool(TileView view)
+        {
+            if (view == null) return;
+
+            if (tilePool != null)
+            {
+                tilePool.Return(view);
+            }
+            else
+            {
+                // Pool not wired in the scene — fall back to deactivation so we don't
+                // leak stale tiles on top of the board. Not ideal; assign tilePool.
+                view.gameObject.SetActive(false);
+            }
         }
     }
 }

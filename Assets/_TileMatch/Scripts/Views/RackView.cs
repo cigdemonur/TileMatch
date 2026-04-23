@@ -1,59 +1,61 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TileMatch.Models;
 
 namespace TileMatch.Views
 {
     /// <summary>
-    /// Renders the 6-slot rack (bottom of the screen).
-    /// Subscribes to RackModel.OnSlotFilled to light up the next slot whenever
-    /// a non-matching tile is parked. Lives on the same World-Space Canvas as
-    /// OrderView so tween targets stay in world coords.
+    /// Renders the N-slot rack (bottom of the screen).
+    /// Delegates per-slot rendering to RackSlotView components — this class
+    /// only wires model events to the right child slot.
     ///
-    /// NOTE: the current design never removes items from the rack mid-run
-    /// (rack-full == Fail), so this view only needs a "fill" path. On
-    /// RestartLevel, Clear() wipes all slots.
+    /// Subscribes to:
+    ///   - RackModel.OnSlotFilled  -> slots[i].Fill(tileType)
+    ///   - RackModel.OnSlotCleared -> slots[i].ClearSlot() (auto-collect path)
     /// </summary>
     public class RackView : MonoBehaviour
     {
         [Header("Slot Refs")]
-        [Tooltip("One slot Image per rack capacity (size == GameConfigSO.rackCapacity, typically 6).")]
-        [SerializeField] private Image[] slotIcons;
-
-        [Tooltip("Sprite shown on an empty slot.")]
-        [SerializeField] private Sprite emptySlotSprite;
+        [Tooltip("One RackSlotView per rack capacity (size == GameConfigSO.rackCapacity, typically 6).")]
+        [SerializeField] private RackSlotView[] slots;
 
         private RackModel _rack;
 
         /// <summary>Called by GameController once the RackModel is created.</summary>
         public void Bind(RackModel rack)
         {
-            if (_rack != null)
-                _rack.OnSlotFilled -= HandleSlotFilled;
+            Unbind();
 
             _rack = rack;
             if (_rack == null) return;
 
             _rack.OnSlotFilled += HandleSlotFilled;
+            _rack.OnSlotCleared += HandleSlotCleared;
 
-            // Initial render: clear every slot (a fresh RackModel is always empty)
-            ResetVisuals();
+            // Initial render — a fresh RackModel is empty.
+            ClearAllVisuals();
         }
 
-        /// <summary>World position of a given rack slot — used as tween target for parked tiles.</summary>
+        private void Unbind()
+        {
+            if (_rack == null) return;
+            _rack.OnSlotFilled -= HandleSlotFilled;
+            _rack.OnSlotCleared -= HandleSlotCleared;
+            _rack = null;
+        }
+
+        /// <summary>World position of a given rack slot's icon — used as tween origin/target.</summary>
         public Vector3 GetSlotWorldPosition(int slotIndex)
         {
-            if (slotIcons == null || slotIndex < 0 || slotIndex >= slotIcons.Length)
+            if (slots == null || slotIndex < 0 || slotIndex >= slots.Length)
                 return transform.position;
 
-            var slot = slotIcons[slotIndex];
-            return slot != null ? slot.transform.position : transform.position;
+            var slot = slots[slotIndex];
+            return slot != null ? slot.GetIconWorldPosition() : transform.position;
         }
 
         /// <summary>
         /// Index of the next slot that will be filled (== current FilledCount).
-        /// Useful for callers that want to aim an animation at a slot before
-        /// the model has been mutated.
+        /// Aim tile-flies-to-rack tweens at this before calling RackModel.TryAdd.
         /// </summary>
         public int GetNextSlotIndex()
         {
@@ -62,36 +64,39 @@ namespace TileMatch.Views
 
         private void HandleSlotFilled(int slotIndex, TileModel tile)
         {
-            if (slotIcons == null || slotIndex < 0 || slotIndex >= slotIcons.Length) return;
+            if (slots == null || slotIndex < 0 || slotIndex >= slots.Length) return;
+            var slot = slots[slotIndex];
+            if (slot == null || tile == null) return;
 
-            var slot = slotIcons[slotIndex];
+            slot.Fill(tile.TileType);
+            // TODO: small pop/punch-scale on slot when filled
+        }
+
+        private void HandleSlotCleared(int slotIndex)
+        {
+            if (slots == null || slotIndex < 0 || slotIndex >= slots.Length) return;
+            var slot = slots[slotIndex];
             if (slot == null) return;
 
-            if (tile != null && tile.TileType != null)
-                slot.sprite = tile.TileType.icon;
-
-            // TODO: small pop/punch-scale on slot when filled
+            slot.ClearSlot();
+            // TODO: fade-out / poof when auto-collected
         }
 
         /// <summary>Clear every slot — used on RestartLevel.</summary>
         public void Clear()
         {
-            ResetVisuals();
+            ClearAllVisuals();
         }
 
-        private void ResetVisuals()
+        private void ClearAllVisuals()
         {
-            if (slotIcons == null) return;
-            for (int i = 0; i < slotIcons.Length; i++)
+            if (slots == null) return;
+            for (int i = 0; i < slots.Length; i++)
             {
-                if (slotIcons[i] != null) slotIcons[i].sprite = emptySlotSprite;
+                if (slots[i] != null) slots[i].ClearSlot();
             }
         }
 
-        private void OnDisable()
-        {
-            if (_rack != null)
-                _rack.OnSlotFilled -= HandleSlotFilled;
-        }
+        private void OnDisable() => Unbind();
     }
 }

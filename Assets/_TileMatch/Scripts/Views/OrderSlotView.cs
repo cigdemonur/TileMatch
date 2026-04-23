@@ -1,31 +1,37 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TileMatch.Data;
 using TileMatch.Models;
 
 namespace TileMatch.Views
 {
     /// <summary>
     /// One visible order slot in the tray.
-    /// Shows the target tile icon and N progress pips (N == OrderData.RequiredCount).
+    /// Layout: a rectangular panel containing 3 icon images (laid out left-to-right)
+    /// of the requested ingredient. Each icon starts faded; as tiles are collected
+    /// the matching icon becomes full-alpha and a green tick overlay turns on.
     /// Subscribes to OrderModel.OnProgressChanged / OnCompleted while bound.
     /// </summary>
     public class OrderSlotView : MonoBehaviour
     {
-        [Header("Icon")]
-        [SerializeField] private Image iconImage;
+        [Header("Icons")]
+        [Tooltip("One Image per required tile (size == OrderData.RequiredCount, currently 3). All three show the same ingredient sprite.")]
+        [SerializeField] private Image[] iconImages;
 
-        [Header("Progress Pips")]
-        [Tooltip("One pip per required tile (size == OrderData.RequiredCount, currently 3).")]
-        [SerializeField] private Image[] pips;
+        [Tooltip("Green tick overlay per icon (size must match iconImages). Shown once the matching icon is collected.")]
+        [SerializeField] private GameObject[] tickOverlays;
 
-        [Tooltip("Sprite shown on a filled pip.")]
-        [SerializeField] private Sprite pipFilledSprite;
-
-        [Tooltip("Sprite shown on an empty pip.")]
-        [SerializeField] private Sprite pipEmptySprite;
+        // Alpha for uncollected icons — set by OrderView.Bind via SetFadedAlpha
+        // so the faded look is a tray-level style setting, not per-slot.
+        private float _fadedAlpha = 0.4f;
 
         private OrderModel _order;
+
+        /// <summary>Called by OrderView to apply the tray-level faded alpha.</summary>
+        public void SetFadedAlpha(float alpha)
+        {
+            _fadedAlpha = Mathf.Clamp01(alpha);
+            if (_order != null) RefreshProgress(_order.CollectedCount);
+        }
 
         /// <summary>Wire this slot to an order and do an initial render.</summary>
         public void Bind(OrderModel order)
@@ -35,16 +41,14 @@ namespace TileMatch.Views
             _order = order;
             if (_order == null) return;
 
-            if (iconImage != null && _order.TileType != null)
-                iconImage.sprite = _order.TileType.icon;
-
-            RefreshPips(_order.CollectedCount);
+            ApplyIconSprites(_order.TileType != null ? _order.TileType.icon : null);
+            RefreshProgress(_order.CollectedCount);
 
             _order.OnProgressChanged += HandleProgressChanged;
             _order.OnCompleted += HandleCompleted;
         }
 
-        /// <summary>Unsubscribe and clear visuals.</summary>
+        /// <summary>Unsubscribe and reset visuals.</summary>
         public void Unbind()
         {
             if (_order != null)
@@ -54,14 +58,27 @@ namespace TileMatch.Views
             }
             _order = null;
 
-            if (iconImage != null) iconImage.sprite = null;
-            RefreshPips(0);
+            ApplyIconSprites(null);
+            RefreshProgress(0);
+        }
+
+        /// <summary>
+        /// World position where the (collectedIndex)-th tile should land.
+        /// collectedIndex is 0-based; pass CollectedCount BEFORE calling Collect()
+        /// so the tween aims at the next empty icon.
+        /// </summary>
+        public Vector3 GetIconWorldPosition(int collectedIndex)
+        {
+            if (iconImages == null || collectedIndex < 0 || collectedIndex >= iconImages.Length)
+                return transform.position;
+            var icon = iconImages[collectedIndex];
+            return icon != null ? icon.transform.position : transform.position;
         }
 
         private void HandleProgressChanged(int collected)
         {
-            RefreshPips(collected);
-            // TODO: small punch-scale on the icon or the newly-filled pip
+            RefreshProgress(collected);
+            // TODO: small punch-scale on the newly-activated icon
         }
 
         private void HandleCompleted()
@@ -69,13 +86,38 @@ namespace TileMatch.Views
             // TODO: burst animation, then OrderController will call OrderView.ClearSlot
         }
 
-        private void RefreshPips(int collected)
+        private void ApplyIconSprites(Sprite sprite)
         {
-            if (pips == null) return;
-            for (int i = 0; i < pips.Length; i++)
+            if (iconImages == null) return;
+            for (int i = 0; i < iconImages.Length; i++)
             {
-                if (pips[i] == null) continue;
-                pips[i].sprite = i < collected ? pipFilledSprite : pipEmptySprite;
+                if (iconImages[i] != null) iconImages[i].sprite = sprite;
+            }
+        }
+
+        private void RefreshProgress(int collected)
+        {
+            int count = iconImages != null ? iconImages.Length : 0;
+            for (int i = 0; i < count; i++)
+            {
+                bool isCollected = i < collected;
+                SetIconCollected(i, isCollected);
+            }
+        }
+
+        private void SetIconCollected(int index, bool collected)
+        {
+            if (iconImages != null && index < iconImages.Length && iconImages[index] != null)
+            {
+                var img = iconImages[index];
+                var c = img.color;
+                c.a = collected ? 1f : _fadedAlpha;
+                img.color = c;
+            }
+
+            if (tickOverlays != null && index < tickOverlays.Length && tickOverlays[index] != null)
+            {
+                tickOverlays[index].SetActive(collected);
             }
         }
 

@@ -1,5 +1,6 @@
 using UnityEngine;
 using TileMatch.Models;
+using TileMatch.Views;
 
 namespace TileMatch.Controllers
 {
@@ -11,12 +12,16 @@ namespace TileMatch.Controllers
     [RequireComponent(typeof(Collider2D))]
     public class TileController : MonoBehaviour
     {
-        // Forward reference — TileView lives in the Views layer (to be written).
-        // Using object for now so this stub compiles standalone; swap to TileView
-        // once the Views layer exists.
-        // TODO: change to: [SerializeField] private TileMatch.Views.TileView view;
+        [Tooltip("TileView on the same GameObject (or a child). Renders the model.")]
+        [SerializeField] private TileView view;
 
         public TileModel Model { get; private set; }
+        public TileView View => view;
+
+        private void Awake()
+        {
+            if (view == null) view = GetComponent<TileView>();
+        }
 
         /// <summary>
         /// Called by BoardController after spawning this tile.
@@ -25,8 +30,7 @@ namespace TileMatch.Controllers
         public void Bind(TileModel model)
         {
             Model = model;
-            // TODO: view.Render(model);
-            // TODO: model.OnBlockedChanged += view.OnBlockedChanged; (or view subscribes itself)
+            if (view != null) view.Render(model);
         }
 
         /// <summary>
@@ -36,7 +40,8 @@ namespace TileMatch.Controllers
         public void OnTapped()
         {
             if (Model == null || Model.IsBlocked) return;
-            // TODO: GameController.Instance.RouteTile(Model);
+            if (GameController.Instance != null)
+                GameController.Instance.RouteTile(Model);
         }
     }
 }
