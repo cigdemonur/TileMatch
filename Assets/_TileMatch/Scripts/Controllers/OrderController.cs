@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using TileMatch.Data;
 using TileMatch.Models;
+using TileMatch.Views;
 
 namespace TileMatch.Controllers
 {
@@ -12,6 +14,8 @@ namespace TileMatch.Controllers
     /// </summary>
     public class OrderController : MonoBehaviour
     {
+        [SerializeField] private OrderView orderView;
+
         private readonly Queue<OrderModel> _queue = new Queue<OrderModel>();
         private readonly List<OrderModel> _activeOrders = new List<OrderModel>();
 
@@ -21,17 +25,39 @@ namespace TileMatch.Controllers
         public IReadOnlyList<OrderModel> ActiveOrders => _activeOrders;
 
         /// <summary>
+        /// Fires right after an order becomes active (Initialize or promotion).
+        /// GameController subscribes to auto-collect matching tiles from the rack.
+        /// </summary>
+        public event Action<OrderModel> OnOrderActivated;
+
+        /// <summary>
         /// Build the queue from level data and fill the active orders slot.
         /// Called by GameController at start.
         /// </summary>
         public void Initialize(IReadOnlyList<OrderData> orders, int simultaneousOrders)
         {
-            _simultaneousOrders = simultaneousOrders;
-            _queue.Clear();
-            _activeOrders.Clear();
+            Reset();
+            _simultaneousOrders = Mathf.Max(1, simultaneousOrders);
 
-            // TODO: wrap each OrderData in an OrderModel and enqueue
-            // TODO: promote first N orders to _activeOrders (subscribe to OnCompleted)
+            if (orders != null)
+            {
+                foreach (var data in orders)
+                {
+                    if (data == null || data.tileType == null) continue;
+                    _queue.Enqueue(new OrderModel(data.tileType));
+                }
+            }
+
+            // Promote up to _simultaneousOrders to the active list.
+            for (int i = 0; i < _simultaneousOrders; i++)
+            {
+                if (_queue.Count == 0) break;
+                var next = _queue.Dequeue();
+                _activeOrders.Add(next);
+                next.OnCompleted += () => OnOrderCompleted(next);
+                if (orderView != null) orderView.ShowOrder(i, next);
+                OnOrderActivated?.Invoke(next);
+            }
         }
 
         /// <summary>
@@ -40,21 +66,46 @@ namespace TileMatch.Controllers
         /// </summary>
         public OrderModel FindMatchingOrder(TileTypeSO type)
         {
-            // TODO: scan _activeOrders left-to-right, return first one where order.Matches(type)
+            if (type == null) return null;
+            for (int i = 0; i < _activeOrders.Count; i++)
+            {
+                if (_activeOrders[i].Matches(type)) return _activeOrders[i];
+            }
             return null;
         }
 
         public void Reset()
         {
-            // TODO: clear queue + activeOrders, unsubscribe listeners
-            // Called by GameController.RestartLevel
+            _queue.Clear();
+            _activeOrders.Clear();
+            if (orderView != null) orderView.Clear();
         }
 
         private void OnOrderCompleted(OrderModel completed)
         {
-            // TODO: remove from _activeOrders, unsubscribe
-            // TODO: if _queue has more -> promote next to active
-            // TODO: if queue empty AND _activeOrders empty -> GameController.SetState(Win)
+            int slotIndex = orderView != null ? orderView.GetSlotIndexFor(completed) : -1;
+            _activeOrders.Remove(completed);
+
+            // Promote the next queued order into the freed slot (if any).
+            if (_queue.Count > 0 && slotIndex >= 0)
+            {
+                var next = _queue.Dequeue();
+                _activeOrders.Add(next);
+                next.OnCompleted += () => OnOrderCompleted(next);
+                if (orderView != null) orderView.ShowOrder(slotIndex, next);
+                OnOrderActivated?.Invoke(next);
+            }
+            else if (slotIndex >= 0 && orderView != null)
+            {
+                orderView.ClearSlot(slotIndex);
+            }
+
+            // Win check.
+            if (_queue.Count == 0 && _activeOrders.Count == 0)
+            {
+                if (GameController.Instance != null)
+                    GameController.Instance.SetState(GameState.Win);
+            }
         }
     }
 }

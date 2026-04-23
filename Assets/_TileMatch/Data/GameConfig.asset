@@ -15,5 +15,6 @@ MonoBehaviour:
   simultaneousOrders: 2
   dotMapWidth: 11
   dotMapHeight: 15
-  miniSquareSize: 0.5
+  miniSquareSize: 0.4
+  columnSpacingScale: 0.9
   rackCapacity: 6

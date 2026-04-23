@@ -18,6 +18,9 @@ namespace TileMatch.Models
         /// <summary>Fires after a tile is placed. Passes (slotIndex, tile). FilledCount already updated.</summary>
         public event Action<int, TileModel> OnSlotFilled;
 
+        /// <summary>Fires after a tile is removed from a specific slot (e.g. auto-collected into an order). Passes slotIndex.</summary>
+        public event Action<int> OnSlotCleared;
+
         /// <summary>Fires after the rack is cleared (e.g. on RestartLevel).</summary>
         public event Action OnCleared;
 
@@ -29,17 +32,45 @@ namespace TileMatch.Models
         }
 
         /// <summary>
-        /// Try to place a tile in the next free slot.
-        /// Returns false if the rack is already full (caller triggers Fail).
+        /// Try to place a tile in the leftmost free slot.
+        /// Returns false if every slot is occupied (caller triggers Fail).
+        /// Note: auto-collection can leave gaps, so we scan for the first
+        /// empty index instead of assuming it == FilledCount.
         /// </summary>
         public bool TryAdd(TileModel tile)
         {
-            if (IsFull) return false;
-            int slotIndex = FilledCount;
+            int slotIndex = FirstFreeSlotIndex();
+            if (slotIndex < 0) return false;
+
             Slots[slotIndex] = tile;
             FilledCount++;
             OnSlotFilled?.Invoke(slotIndex, tile);
             return true;
+        }
+
+        /// <summary>
+        /// Remove the tile in a specific slot (used for auto-collection into orders).
+        /// Returns false if the slot is already empty or out of range.
+        /// </summary>
+        public bool TryRemoveAt(int slotIndex, out TileModel removed)
+        {
+            removed = null;
+            if (slotIndex < 0 || slotIndex >= Capacity) return false;
+            if (Slots[slotIndex] == null) return false;
+
+            removed = Slots[slotIndex];
+            Slots[slotIndex] = null;
+            FilledCount--;
+            OnSlotCleared?.Invoke(slotIndex);
+            return true;
+        }
+
+        /// <summary>Index of the leftmost empty slot, or -1 if the rack is full.</summary>
+        public int FirstFreeSlotIndex()
+        {
+            for (int i = 0; i < Capacity; i++)
+                if (Slots[i] == null) return i;
+            return -1;
         }
 
         public void Clear()
