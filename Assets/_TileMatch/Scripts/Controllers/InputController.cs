@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace TileMatch.Controllers
@@ -49,6 +50,10 @@ namespace TileMatch.Controllers
                 screenPos = Touchscreen.current.primaryTouch.position.ReadValue();
             }
 
+            // Ignore taps that land on UI (rack / order tray / win-fail panels).
+            if (tapped && EventSystem.current != null &&
+                EventSystem.current.IsPointerOverGameObject()) return;
+
             if (tapped) HandleTap(screenPos);
         }
 
@@ -65,8 +70,14 @@ namespace TileMatch.Controllers
             var hits = Physics2D.OverlapPointAll(point, tileLayerMask);
             if (hits == null || hits.Length == 0) return;
 
+            // Pick the unblocked tile whose model is on the highest layer.
+            // If multiple candidates share the top layer (common — most demo
+            // levels are single-layer), break ties by pixel-distance from the
+            // tap point to the tile's center so adjacent overlapping colliders
+            // don't steal the tap.
             TileController best = null;
             int bestLayer = int.MinValue;
+            float bestDistSqr = float.PositiveInfinity;
 
             for (int i = 0; i < hits.Length; i++)
             {
@@ -74,10 +85,18 @@ namespace TileMatch.Controllers
                 if (tc == null || tc.Model == null) continue;
                 if (tc.Model.IsBlocked) continue;
 
-                if (tc.Model.Layer > bestLayer)
+                int layer = tc.Model.Layer;
+                float distSqr = ((Vector2)tc.transform.position - point).sqrMagnitude;
+
+                bool better =
+                    layer > bestLayer ||
+                    (layer == bestLayer && distSqr < bestDistSqr);
+
+                if (better)
                 {
                     best = tc;
-                    bestLayer = tc.Model.Layer;
+                    bestLayer = layer;
+                    bestDistSqr = distSqr;
                 }
             }
 
