@@ -99,11 +99,9 @@ namespace TileMatch.Controllers
         {
             if (tile == null || State != GameState.Playing) return;
 
-            // 1) Tap feedback on the view.
             var tileView = boardView != null ? boardView.GetViewFor(tile) : null;
-            if (tileView != null) tileView.AnimateTap();
 
-            // 2) Try to match an active order first.
+            // 1) Try to match an active order first.
             var match = orderController != null
                 ? orderController.FindMatchingOrder(tile.TileType)
                 : null;
@@ -116,7 +114,7 @@ namespace TileMatch.Controllers
 
                 if (tileView != null)
                 {
-                    tileView.AnimateMoveToTarget(target, () =>
+                    tileView.PlayTapAndFly(target, TileDestination.Order, () =>
                     {
                         match.Collect();
                         if (Board != null) Board.RemoveTile(tile);
@@ -130,7 +128,7 @@ namespace TileMatch.Controllers
                 return;
             }
 
-            // 3) No match — send to rack (triggers Fail if rack is full).
+            // 2) No match — send to rack (triggers Fail if rack is full).
             int rackSlot = rackController != null ? rackController.PeekNextFreeSlot() : -1;
             Vector3 rackTarget = (rackSlot >= 0 && rackView != null)
                 ? rackView.GetSlotWorldPosition(rackSlot)
@@ -138,7 +136,7 @@ namespace TileMatch.Controllers
 
             if (tileView != null)
             {
-                tileView.AnimateMoveToTarget(rackTarget, () =>
+                tileView.PlayTapAndFly(rackTarget, TileDestination.Rack, () =>
                 {
                     if (rackController != null) rackController.TryAdd(tile);
                     if (Board != null) Board.RemoveTile(tile);

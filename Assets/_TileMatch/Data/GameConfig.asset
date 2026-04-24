@@ -17,4 +17,5 @@ MonoBehaviour:
   dotMapHeight: 15
   miniSquareSize: 0.4
   columnSpacingScale: 0.9
+  tileYOffset: -0.07
   rackCapacity: 6
