@@ -11,6 +11,9 @@ namespace TileMatch.Data
     [CreateAssetMenu(fileName = "Level_New", menuName = "TileMatch/Level")]
     public class LevelDataSO : ScriptableObject
     {
+        [Tooltip("Displayed by the HUD as 'Level N'.")]
+        public int levelNumber = 1;
+
         [Tooltip("All tiles placed on the board at level start.")]
         public List<TilePlacement> tiles = new List<TilePlacement>();
 

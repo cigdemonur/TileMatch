@@ -1,0 +1,121 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d67aa993906374cc1b00c6596f722ec0, type: 3}
+  m_Name: Level3
+  m_EditorClassIdentifier: 
+  levelNumber: 3
+  tiles:
+  - dotX: 4
+    dotY: 3
+    layer: 0
+    tileType: {fileID: 11400000, guid: 014203e468a324f4db11672a3e4aa9c5, type: 2}
+  - dotX: 6
+    dotY: 3
+    layer: 0
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 4
+    dotY: 5
+    layer: 0
+    tileType: {fileID: 11400000, guid: 3d98646187fe640cda7192c850519ad9, type: 2}
+  - dotX: 6
+    dotY: 7
+    layer: 0
+    tileType: {fileID: 11400000, guid: 014203e468a324f4db11672a3e4aa9c5, type: 2}
+  - dotX: 6
+    dotY: 9
+    layer: 0
+    tileType: {fileID: 11400000, guid: 3d98646187fe640cda7192c850519ad9, type: 2}
+  - dotX: 4
+    dotY: 7
+    layer: 0
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 6
+    dotY: 5
+    layer: 0
+    tileType: {fileID: 11400000, guid: 0bb8f7787c55543bc97f1f01abf049b5, type: 2}
+  - dotX: 4
+    dotY: 9
+    layer: 0
+    tileType: {fileID: 11400000, guid: 170cfefb1d8b845319f735862068b037, type: 2}
+  - dotX: 5
+    dotY: 4
+    layer: 1
+    tileType: {fileID: 11400000, guid: 014203e468a324f4db11672a3e4aa9c5, type: 2}
+  - dotX: 3
+    dotY: 4
+    layer: 1
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 4
+    dotY: 6
+    layer: 1
+    tileType: {fileID: 11400000, guid: 3d98646187fe640cda7192c850519ad9, type: 2}
+  - dotX: 6
+    dotY: 6
+    layer: 1
+    tileType: {fileID: 11400000, guid: 0bb8f7787c55543bc97f1f01abf049b5, type: 2}
+  - dotX: 7
+    dotY: 4
+    layer: 1
+    tileType: {fileID: 11400000, guid: 0bb8f7787c55543bc97f1f01abf049b5, type: 2}
+  - dotX: 3
+    dotY: 8
+    layer: 1
+    tileType: {fileID: 11400000, guid: 170cfefb1d8b845319f735862068b037, type: 2}
+  - dotX: 5
+    dotY: 8
+    layer: 1
+    tileType: {fileID: 11400000, guid: d5650e65b0cb146968dff92d3d52a641, type: 2}
+  - dotX: 7
+    dotY: 8
+    layer: 1
+    tileType: {fileID: 11400000, guid: 170cfefb1d8b845319f735862068b037, type: 2}
+  - dotX: 4
+    dotY: 7
+    layer: 2
+    tileType: {fileID: 11400000, guid: d5650e65b0cb146968dff92d3d52a641, type: 2}
+  - dotX: 6
+    dotY: 7
+    layer: 2
+    tileType: {fileID: 11400000, guid: c1612dfb7161447c1a4a0e0f68d77de0, type: 2}
+  - dotX: 4
+    dotY: 5
+    layer: 2
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 6
+    dotY: 5
+    layer: 2
+    tileType: {fileID: 11400000, guid: d5650e65b0cb146968dff92d3d52a641, type: 2}
+  - dotX: 5
+    dotY: 6
+    layer: 3
+    tileType: {fileID: 11400000, guid: c1612dfb7161447c1a4a0e0f68d77de0, type: 2}
+  - dotX: 3
+    dotY: 7
+    layer: 3
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 7
+    dotY: 5
+    layer: 3
+    tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - dotX: 4
+    dotY: 4
+    layer: 3
+    tileType: {fileID: 11400000, guid: c1612dfb7161447c1a4a0e0f68d77de0, type: 2}
+  orders:
+  - tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - tileType: {fileID: 11400000, guid: c1612dfb7161447c1a4a0e0f68d77de0, type: 2}
+  - tileType: {fileID: 11400000, guid: d5650e65b0cb146968dff92d3d52a641, type: 2}
+  - tileType: {fileID: 11400000, guid: 170cfefb1d8b845319f735862068b037, type: 2}
+  - tileType: {fileID: 11400000, guid: 0bb8f7787c55543bc97f1f01abf049b5, type: 2}
+  - tileType: {fileID: 11400000, guid: 3d98646187fe640cda7192c850519ad9, type: 2}
+  - tileType: {fileID: 11400000, guid: afd8c8c117a4b4bf18103e577430c357, type: 2}
+  - tileType: {fileID: 11400000, guid: 014203e468a324f4db11672a3e4aa9c5, type: 2}

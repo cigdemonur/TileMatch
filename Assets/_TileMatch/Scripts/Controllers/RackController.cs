@@ -12,6 +12,11 @@ namespace TileMatch.Controllers
     {
         private RackModel _rack;
 
+        // Slots that have been promised to in-flight tiles but aren't filled yet.
+        // Prevents two near-simultaneous rack-bound flights from aiming at the same slot.
+        private readonly System.Collections.Generic.HashSet<int> _reservedSlots
+            = new System.Collections.Generic.HashSet<int>();
+
         public RackModel Rack => _rack;
 
         /// <summary>Called by GameController once the RackModel is created.</summary>
@@ -28,7 +33,13 @@ namespace TileMatch.Controllers
         {
             if (_rack == null) return false;
 
-            if (_rack.TryAdd(tile)) return true;
+            if (_rack.TryAdd(tile))
+            {
+                // Fail the moment the rack hits capacity — no need to wait for an overflow attempt.
+                if (_rack.FilledCount >= _rack.Capacity && GameController.Instance != null)
+                    GameController.Instance.SetState(GameState.Fail);
+                return true;
+            }
 
             if (GameController.Instance != null)
                 GameController.Instance.SetState(GameState.Fail);
@@ -65,8 +76,57 @@ namespace TileMatch.Controllers
             return _rack != null ? _rack.FirstFreeSlotIndex() : -1;
         }
 
+        /// <summary>
+        /// Find the leftmost slot that is neither filled nor already reserved
+        /// for an in-flight tile, mark it reserved, and return its index.
+        /// Returns -1 (caller should Fail) if every slot is taken.
+        /// </summary>
+        public int ReserveNextFreeSlot()
+        {
+            if (_rack == null) return -1;
+            for (int i = 0; i < _rack.Capacity; i++)
+            {
+                if (_rack.Slots[i] == null && !_reservedSlots.Contains(i))
+                {
+                    _reservedSlots.Add(i);
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// Drop the reservation without placing a tile (e.g. flight aborted).
+        /// </summary>
+        public void ReleaseReservation(int slotIndex)
+        {
+            _reservedSlots.Remove(slotIndex);
+        }
+
+        /// <summary>
+        /// Commit a reserved slot: place the tile there and clear the reservation.
+        /// Triggers Fail if this fills the rack to capacity.
+        /// </summary>
+        public bool CommitReserved(int slotIndex, TileModel tile)
+        {
+            _reservedSlots.Remove(slotIndex);
+            if (_rack == null) return false;
+
+            if (!_rack.TryAddAt(slotIndex, tile))
+            {
+                if (GameController.Instance != null)
+                    GameController.Instance.SetState(GameState.Fail);
+                return false;
+            }
+
+            if (_rack.FilledCount >= _rack.Capacity && GameController.Instance != null)
+                GameController.Instance.SetState(GameState.Fail);
+            return true;
+        }
+
         public void Reset()
         {
+            _reservedSlots.Clear();
             if (_rack != null) _rack.Clear();
         }
     }

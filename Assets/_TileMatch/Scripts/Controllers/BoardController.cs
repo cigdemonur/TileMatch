@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using TileMatch.Data;
 using TileMatch.Models;
@@ -82,7 +83,54 @@ namespace TileMatch.Controllers
                 _board.AddTile(model);
             }
 
+            RecomputeLayers();
             RefreshBlockedState();
+        }
+
+        /// <summary>
+        /// Re-derive every tile's Layer as "depth from the top of its stack."
+        /// Top-of-stack tiles (nothing covering them) become layer 0, so all
+        /// currently-tappable tiles share the same layer value. Uses each
+        /// tile's immutable OriginalLayer to determine the static "is above"
+        /// partial order so repeated calls remain consistent.
+        /// </summary>
+        public void RecomputeLayers()
+        {
+            if (_board == null) return;
+            var tiles = _board.Tiles;
+
+            // Process from highest OriginalLayer (top) to lowest (bottom) so
+            // each tile can read the already-assigned depth of any tile above it.
+            var sorted = new List<TileModel>(tiles);
+            sorted.Sort((a, b) => b.OriginalLayer.CompareTo(a.OriginalLayer));
+
+            var newDepth = new Dictionary<TileModel, int>(sorted.Count);
+            foreach (var t in sorted)
+            {
+                int max = -1;
+                foreach (var kv in newDepth)
+                {
+                    var s = kv.Key;
+                    if (s.OriginalLayer > t.OriginalLayer && s.Overlaps(t) && kv.Value > max)
+                        max = kv.Value;
+                }
+                newDepth[t] = max + 1;
+            }
+
+            float s2 = gameConfig.miniSquareSize;
+            foreach (var kv in newDepth)
+            {
+                var t = kv.Key;
+                if (t.Layer == kv.Value) continue;
+                t.SetLayer(kv.Value);
+
+                if (boardView != null)
+                {
+                    var view = boardView.GetViewFor(t);
+                    if (view != null)
+                        view.transform.localPosition = DotToWorld(t.DotPos.x, t.DotPos.y, kv.Value, s2);
+                }
+            }
         }
 
         /// <summary>
@@ -103,25 +151,10 @@ namespace TileMatch.Controllers
         public void RefreshBlockedState()
         {
             if (_board == null) return;
-            var tiles = _board.Tiles;
-            int n = tiles.Count;
-
-            for (int i = 0; i < n; i++)
-            {
-                var a = tiles[i];
-                bool blocked = false;
-                for (int j = 0; j < n; j++)
-                {
-                    if (i == j) continue;
-                    var b = tiles[j];
-                    if (b.Layer > a.Layer && b.Overlaps(a))
-                    {
-                        blocked = true;
-                        break;
-                    }
-                }
-                a.SetBlocked(blocked);
-            }
+            // Layer is depth-from-top after RecomputeLayers, so anything with
+            // a non-zero depth has at least one overlapping tile above it.
+            foreach (var t in _board.Tiles)
+                t.SetBlocked(t.Layer > 0);
         }
 
         private Vector3 DotToWorld(int dotX, int dotY, int layer, float s)
@@ -134,13 +167,14 @@ namespace TileMatch.Controllers
             float offsetX = (gameConfig.dotMapWidth - 1) * 0.5f * sx;
             float offsetY = (gameConfig.dotMapHeight - 1) * 0.5f * sy;
 
-            // Depth rules (smaller Z = closer to camera = rendered on top):
-            //   - Higher layers pull closer to the camera so upper tiles cover lower ones.
-            //   - Within a layer, lower dotY pulls closer so front-row tiles cover the
-            //     3D shadow on the top edge of the tiles behind them (painter's algorithm).
-            // Layer step (0.1) is much larger than the per-row step (0.001) so layers
-            // always dominate dot-Y sorting.
-            float z = -layer * 0.1f + dotY * 0.001f;
+            // Depth rules (smaller Z = closer to camera = rendered on top).
+            // Layer is depth-from-top: 0 means the tile is on top of its stack.
+            // So smaller Layer → smaller Z → renders on top. Within a layer,
+            // lower dotY pulls closer so front-row tiles cover the 3D shadow
+            // on the top edge of the tiles behind them (painter's algorithm).
+            // Layer step (0.1) is much larger than the per-row step (0.001) so
+            // layers always dominate dot-Y sorting.
+            float z = layer * 0.1f + dotY * 0.001f;
             // Pull tile visually down (or up) so the anchor dot sits at the sprite's
             // visual center — gizmo dots are NOT shifted, only the tile render.
             return new Vector3(dotX * sx - offsetX,
@@ -150,6 +184,7 @@ namespace TileMatch.Controllers
 
         private void HandleTileRemoved(TileModel tile)
         {
+            RecomputeLayers();
             RefreshBlockedState();
         }
 

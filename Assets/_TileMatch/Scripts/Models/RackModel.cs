@@ -49,6 +49,22 @@ namespace TileMatch.Models
         }
 
         /// <summary>
+        /// Place a tile at a specific slot index. Used after a flight that
+        /// reserved that slot at tap time so concurrent rack-bound flights
+        /// don't all land on the same slot.
+        /// </summary>
+        public bool TryAddAt(int slotIndex, TileModel tile)
+        {
+            if (slotIndex < 0 || slotIndex >= Capacity) return false;
+            if (Slots[slotIndex] != null) return false;
+
+            Slots[slotIndex] = tile;
+            FilledCount++;
+            OnSlotFilled?.Invoke(slotIndex, tile);
+            return true;
+        }
+
+        /// <summary>
         /// Remove the tile in a specific slot (used for auto-collection into orders).
         /// Returns false if the slot is already empty or out of range.
         /// </summary>

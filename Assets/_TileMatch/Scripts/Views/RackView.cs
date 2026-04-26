@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using TileMatch.Models;
 
@@ -18,6 +19,13 @@ namespace TileMatch.Views
         [Tooltip("One RackSlotView per rack capacity (size == GameConfigSO.rackCapacity, typically 6).")]
         [SerializeField] private RackSlotView[] slots;
 
+        [Header("Animation")]
+        [Tooltip("Duration of the flight from a rack slot to its target order icon.")]
+        [SerializeField] private float rackToOrderDuration = 0.3f;
+
+        /// <summary>Duration of the flight from a rack slot into an order icon — read by GameController.</summary>
+        public float RackToOrderDuration => rackToOrderDuration;
+
         private RackModel _rack;
 
         /// <summary>Called by GameController once the RackModel is created.</summary>
@@ -30,6 +38,7 @@ namespace TileMatch.Views
 
             _rack.OnSlotFilled += HandleSlotFilled;
             _rack.OnSlotCleared += HandleSlotCleared;
+            _rack.OnCleared += ClearAllVisuals;
 
             // Initial render — a fresh RackModel is empty.
             ClearAllVisuals();
@@ -40,6 +49,7 @@ namespace TileMatch.Views
             if (_rack == null) return;
             _rack.OnSlotFilled -= HandleSlotFilled;
             _rack.OnSlotCleared -= HandleSlotCleared;
+            _rack.OnCleared -= ClearAllVisuals;
             _rack = null;
         }
 
@@ -80,6 +90,15 @@ namespace TileMatch.Views
 
             slot.ClearSlot();
             // TODO: fade-out / poof when auto-collected
+        }
+
+        /// <summary>Animate the slot's icon to <paramref name="worldTarget"/>, then clear it.</summary>
+        public void AnimateSlotIconTo(int slotIndex, Vector3 worldTarget, float duration, Action onArrive)
+        {
+            if (slots == null || slotIndex < 0 || slotIndex >= slots.Length) { onArrive?.Invoke(); return; }
+            var slot = slots[slotIndex];
+            if (slot == null) { onArrive?.Invoke(); return; }
+            slot.AnimateIconTo(worldTarget, duration, onArrive);
         }
 
         /// <summary>Clear every slot — used on RestartLevel.</summary>

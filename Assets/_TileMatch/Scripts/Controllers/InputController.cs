@@ -79,14 +79,33 @@ namespace TileMatch.Controllers
             int bestLayer = int.MinValue;
             float bestDistSqr = float.PositiveInfinity;
 
+            // Track the topmost blocked tile too so we can shake-feedback it
+            // when no unblocked candidate is available under the tap.
+            TileController bestBlocked = null;
+            int bestBlockedLayer = int.MinValue;
+            float bestBlockedDistSqr = float.PositiveInfinity;
+
             for (int i = 0; i < hits.Length; i++)
             {
                 var tc = hits[i].GetComponentInParent<TileController>();
                 if (tc == null || tc.Model == null) continue;
-                if (tc.Model.IsBlocked) continue;
 
                 int layer = tc.Model.Layer;
                 float distSqr = ((Vector2)tc.transform.position - point).sqrMagnitude;
+
+                if (tc.Model.IsBlocked)
+                {
+                    bool betterB =
+                        layer > bestBlockedLayer ||
+                        (layer == bestBlockedLayer && distSqr < bestBlockedDistSqr);
+                    if (betterB)
+                    {
+                        bestBlocked = tc;
+                        bestBlockedLayer = layer;
+                        bestBlockedDistSqr = distSqr;
+                    }
+                    continue;
+                }
 
                 bool better =
                     layer > bestLayer ||
@@ -101,6 +120,7 @@ namespace TileMatch.Controllers
             }
 
             if (best != null) best.OnTapped();
+            else if (bestBlocked != null) bestBlocked.OnBlockedTapped();
         }
     }
 }

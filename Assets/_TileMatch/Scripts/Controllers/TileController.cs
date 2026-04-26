@@ -43,5 +43,15 @@ namespace TileMatch.Controllers
             if (GameController.Instance != null)
                 GameController.Instance.RouteTile(Model);
         }
+
+        /// <summary>
+        /// Called by InputController when the topmost tile under the tap is
+        /// blocked. Plays a side-to-side shake to signal "can't tap me yet".
+        /// </summary>
+        public void OnBlockedTapped()
+        {
+            if (Model == null) return;
+            if (view != null) view.AnimateBlockedShake();
+        }
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using TileMatch.Models;
@@ -20,11 +22,21 @@ namespace TileMatch.Views
         [Tooltip("Green tick overlay per icon (size must match iconImages). Shown once the matching icon is collected.")]
         [SerializeField] private GameObject[] tickOverlays;
 
+        [Header("Swap Animation")]
+        [Tooltip("How long the slot shrinks to nothing when its order completes.")]
+        [SerializeField] private float clearDuration = 0.18f;
+        [SerializeField] private Ease clearEase = Ease.InBack;
+        [Tooltip("How long the slot grows from nothing when a new order takes its place.")]
+        [SerializeField] private float showDuration = 0.28f;
+        [SerializeField] private Ease showEase = Ease.OutBack;
+
         // Alpha for uncollected icons — set by OrderView.Bind via SetFadedAlpha
         // so the faded look is a tray-level style setting, not per-slot.
         private float _fadedAlpha = 0.4f;
 
         private OrderModel _order;
+        private Vector3 _initialScale;
+        private bool _scaleCached;
 
         /// <summary>Called by OrderView to apply the tray-level faded alpha.</summary>
         public void SetFadedAlpha(float alpha)
@@ -78,12 +90,10 @@ namespace TileMatch.Views
         private void HandleProgressChanged(int collected)
         {
             RefreshProgress(collected);
-            // TODO: small punch-scale on the newly-activated icon
         }
 
         private void HandleCompleted()
         {
-            // TODO: burst animation, then OrderController will call OrderView.ClearSlot
         }
 
         private void ApplyIconSprites(Sprite sprite)
@@ -122,5 +132,47 @@ namespace TileMatch.Views
         }
 
         private void OnDisable() => Unbind();
+
+        private void Awake()
+        {
+            CacheScale();
+        }
+
+        private void CacheScale()
+        {
+            if (_scaleCached) return;
+            _initialScale = transform.localScale;
+            // If the editor saved scale 0 (slot was hidden) fall back to one.
+            if (_initialScale.sqrMagnitude < 0.0001f) _initialScale = Vector3.one;
+            _scaleCached = true;
+        }
+
+        /// <summary>
+        /// Shrink the slot to nothing, unbind the model, then invoke onDone.
+        /// Caller (OrderController) follows up with AnimateShow when a new
+        /// order takes the slot.
+        /// </summary>
+        public void AnimateClear(Action onDone)
+        {
+            CacheScale();
+            transform.DOKill();
+            transform.DOScale(Vector3.zero, clearDuration)
+                .SetEase(clearEase)
+                .OnComplete(() =>
+                {
+                    Unbind();
+                    transform.localScale = _initialScale; // ready for next grow
+                    onDone?.Invoke();
+                });
+        }
+
+        /// <summary>Grow the slot from nothing to its rest size.</summary>
+        public void AnimateShow()
+        {
+            CacheScale();
+            transform.DOKill();
+            transform.localScale = Vector3.zero;
+            transform.DOScale(_initialScale, showDuration).SetEase(showEase);
+        }
     }
 }
