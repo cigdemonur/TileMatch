@@ -311,6 +311,7 @@ MonoBehaviour:
   - {fileID: 540105368}
   - {fileID: 2048111242}
   fadedAlpha: 0.7
+  rackFlightStartDelay: 0.32
 --- !u!114 &36764122
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -948,6 +949,8 @@ MonoBehaviour:
   panelStartScale: 0.6
   levelLabel: {fileID: 1217684052}
   levelLabelFormat: '{0}'
+  failLevelLabel: {fileID: 1311006627}
+  failLevelLabelFormat: Level {0} Failed
 --- !u!223 &279928797
 Canvas:
   m_ObjectHideFlags: 0
@@ -4377,8 +4380,6 @@ MonoBehaviour:
   rackView: {fileID: 1951238633}
   orderView: {fileID: 36764121}
   gameView: {fileID: 279928796}
-  rackToOrderDuration: 0.3
-  rackToOrderStartDelay: 0.32
 --- !u!4 &1870464560
 Transform:
   m_ObjectHideFlags: 0
@@ -4654,6 +4655,7 @@ MonoBehaviour:
   - {fileID: 852898317}
   - {fileID: 1173626280}
   - {fileID: 1037279959}
+  rackToOrderDuration: 0.3
 --- !u!222 &1951238634
 CanvasRenderer:
   m_ObjectHideFlags: 0
