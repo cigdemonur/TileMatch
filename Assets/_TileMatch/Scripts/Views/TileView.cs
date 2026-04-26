@@ -32,9 +32,18 @@ namespace TileMatch.Views
         [Tooltip("Optional particle burst fired when the base 'breaks'. Play On Awake should be OFF on the prefab.")]
         [SerializeField] private ParticleSystem breakParticles;
 
-        [Header("Blocked Fade")]
-        [SerializeField] private float blockedAlpha = 0.5f;
-        [SerializeField] private float fadeDuration = 0.15f;
+        [Header("Blocked Tint")]
+        [Tooltip("Color tint applied to base + icon when the tile is blocked (non-tappable). Alpha stays opaque.")]
+        [SerializeField] private Color blockedTint = new Color(0.55f, 0.55f, 0.55f, 1f);
+        [SerializeField] private float fadeDuration = 0.06f;
+
+        [Header("Blocked Shake")]
+        [Tooltip("Horizontal shake amplitude (local units) when a blocked tile is tapped.")]
+        [SerializeField] private float blockedShakeAmplitude = 0.12f;
+        [Tooltip("Total duration of the blocked-shake wiggle.")]
+        [SerializeField] private float blockedShakeDuration = 0.28f;
+        [Tooltip("How many oscillations the shake performs over its duration. Higher = more wiggle.")]
+        [SerializeField] private int blockedShakeVibrato = 10;
 
         [Header("Tap Grow (whole tile)")]
         [Tooltip("How much the whole tile scales up before the base breaks.")]
@@ -55,13 +64,11 @@ namespace TileMatch.Views
         [Tooltip("Sorting order used during flight so the icon draws above any canvas on the same layer.")]
         [SerializeField] private int flyingSortingOrder = 32000;
 
-        private const int TweenIdTap = 1;
-        private const int TweenIdMove = 2;
-        private const int TweenIdScale = 3;
-        private const int TweenIdGrow = 4;
-
         private TileModel _model;
+        private bool _isFlying;
+        public bool IsFlying => _isFlying;
         private Vector3 _rootLocalScale;
+        private bool _isShaking;
         private Vector3 _iconLocalPos;
         private Vector3 _iconLocalScale;
         private string _iconOriginalSortingLayer;
@@ -88,15 +95,38 @@ namespace TileMatch.Views
         {
             Unsubscribe();
             KillAllTweens();
+            _isFlying = false;
+            _isShaking = false;
             ResetVisualsForPooling();
 
             _model = model;
             if (iconRenderer != null && model.TileType != null)
                 iconRenderer.sprite = model.TileType.icon;
 
+            ApplyLayerSorting(model.Layer);
+
             SetBlockedInstant(model.IsBlocked);
 
             _model.OnBlockedChanged += HandleBlockedChanged;
+            _model.OnLayerChanged += HandleLayerChanged;
+        }
+
+        private void HandleLayerChanged(int newLayer)
+        {
+            ApplyLayerSorting(newLayer);
+        }
+
+        /// <summary>
+        /// Layer is depth-from-top: 0 = top of stack. So lower layer needs
+        /// higher sortingOrder to render above the tile beneath. The icon
+        /// always sits one above its own base, preventing layer-N base
+        /// drawing above layer-N icon.
+        /// </summary>
+        private void ApplyLayerSorting(int layer)
+        {
+            int layerOrderBase = -layer * 10;
+            if (baseRenderer != null) baseRenderer.sortingOrder = layerOrderBase;
+            if (iconRenderer != null) iconRenderer.sortingOrder = layerOrderBase + 1;
         }
 
         /// <summary>
@@ -108,10 +138,9 @@ namespace TileMatch.Views
             if (!gameObject.activeInHierarchy || iconRenderer == null) return;
             var t = iconRenderer.transform;
 
-            DOTween.Kill(TweenIdTap);
+            t.DOKill();
             t.localScale = _iconLocalScale;
-            t.DOPunchScale(_iconLocalScale * 0.2f, 0.18f, 6, 0.5f)
-                .SetId(TweenIdTap);
+            t.DOPunchScale(_iconLocalScale * 0.2f, 0.18f, 6, 0.5f);
         }
 
         /// <summary>
@@ -128,6 +157,10 @@ namespace TileMatch.Views
         /// </summary>
         public void PlayTapAndFly(Vector3 worldTarget, TileDestination destination, Action onComplete = null)
         {
+            // Ignore re-taps while a flight is already in progress so the tween
+            // isn't restarted from the grown pose halfway through.
+            if (_isFlying) return;
+
             float arrivalScaleFactor = destination == TileDestination.Order
                 ? orderArrivalScale
                 : rackArrivalScale;
@@ -138,9 +171,9 @@ namespace TileMatch.Views
                 return;
             }
 
-            DOTween.Kill(TweenIdGrow);
-            DOTween.Kill(TweenIdMove);
-            DOTween.Kill(TweenIdScale);
+            _isFlying = true;
+            transform.DOKill();
+            iconRenderer.transform.DOKill();
 
             // Reset to a known pose in case an earlier tween was interrupted.
             transform.localScale = _rootLocalScale;
@@ -149,7 +182,6 @@ namespace TileMatch.Views
             // Phase 1: grow the whole tile (base + icon).
             transform.DOScale(_rootLocalScale * tapGrowScale, tapGrowDuration)
                 .SetEase(tapGrowEase)
-                .SetId(TweenIdGrow)
                 .OnComplete(() => BreakAndFly(worldTarget, arrivalScaleFactor, onComplete));
         }
 
@@ -171,6 +203,9 @@ namespace TileMatch.Views
             if (baseRenderer != null) baseRenderer.enabled = false;
             if (breakParticles != null)
             {
+                // Re-enable in case Stop Action / pool churn left the GO inactive.
+                if (!breakParticles.gameObject.activeSelf)
+                    breakParticles.gameObject.SetActive(true);
                 breakParticles.Clear(true);
                 breakParticles.Play(true);
             }
@@ -187,12 +222,44 @@ namespace TileMatch.Views
 
             iconT.DOMove(flatTarget, moveToTargetDuration)
                 .SetEase(moveEase)
-                .SetId(TweenIdMove)
-                .OnComplete(() => onComplete?.Invoke());
+                .OnComplete(() =>
+                {
+                    _isFlying = false;
+                    onComplete?.Invoke();
+                });
 
             iconT.DOScale(arrivalLocalScale, moveToTargetDuration)
-                .SetEase(moveEase)
-                .SetId(TweenIdScale);
+                .SetEase(moveEase);
+        }
+
+        /// <summary>
+        /// Side-to-side wiggle for "you tapped a blocked tile, can't take it yet".
+        /// Captures the live localPosition as origin so it works at any board slot,
+        /// and refuses to restart while a previous shake is still in progress.
+        /// </summary>
+        public void AnimateBlockedShake()
+        {
+            if (!gameObject.activeInHierarchy || _isFlying || _isShaking) return;
+
+            var t = transform;
+            t.DOKill();
+            Vector3 origin = t.localPosition;
+            _isShaking = true;
+
+            // DOShakePosition with randomness=0 and fadeOut=true produces a
+            // smooth, decaying horizontal sine wiggle that returns to origin.
+            t.DOShakePosition(
+                    blockedShakeDuration,
+                    new Vector3(blockedShakeAmplitude, 0f, 0f),
+                    vibrato: blockedShakeVibrato,
+                    randomness: 0f,
+                    snapping: false,
+                    fadeOut: true)
+                .OnComplete(() =>
+                {
+                    t.localPosition = origin;
+                    _isShaking = false;
+                });
         }
 
         /// <summary>Subtle bump when a tile becomes free (higher tile removed).</summary>
@@ -204,27 +271,50 @@ namespace TileMatch.Views
 
         private void HandleBlockedChanged(bool blocked)
         {
+            Color target = blocked ? blockedTint : Color.white;
             if (iconRenderer != null)
             {
                 iconRenderer.DOKill();
-                iconRenderer.DOFade(blocked ? blockedAlpha : 1f, fadeDuration);
+                iconRenderer.DOColor(target, fadeDuration);
             }
-            if (!blocked) AnimateUnblock();
+            if (baseRenderer != null)
+            {
+                baseRenderer.DOKill();
+                baseRenderer.DOColor(target, fadeDuration);
+            }
         }
 
         private void SetBlockedInstant(bool blocked)
         {
-            if (iconRenderer == null) return;
-            var c = iconRenderer.color;
-            c.a = blocked ? blockedAlpha : 1f;
-            iconRenderer.color = c;
+            Color target = blocked ? blockedTint : Color.white;
+            if (iconRenderer != null) iconRenderer.color = target;
+            if (baseRenderer != null) baseRenderer.color = target;
+        }
+
+        /// <summary>Force the dimmed tint regardless of model state — used on Fail.</summary>
+        public void ForceDim()
+        {
+            if (iconRenderer != null)
+            {
+                iconRenderer.DOKill();
+                iconRenderer.color = blockedTint;
+            }
+            if (baseRenderer != null)
+            {
+                baseRenderer.DOKill();
+                baseRenderer.color = blockedTint;
+            }
         }
 
         /// <summary>Restore base + icon pose so a pooled tile looks fresh on reuse.</summary>
         private void ResetVisualsForPooling()
         {
             transform.localScale = _rootLocalScale;
-            if (baseRenderer != null) baseRenderer.enabled = true;
+            if (baseRenderer != null)
+            {
+                baseRenderer.enabled = true;
+                baseRenderer.color = Color.white;
+            }
             if (breakParticles != null)
                 breakParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (iconRenderer != null)
@@ -233,9 +323,8 @@ namespace TileMatch.Views
                 iconT.localPosition = _iconLocalPos;
                 iconT.localScale = _iconLocalScale;
                 iconT.localRotation = Quaternion.identity;
-                var c = iconRenderer.color;
-                c.a = 1f;
-                iconRenderer.color = c;
+                iconRenderer.color = Color.white;
+                iconRenderer.enabled = true;
                 if (!string.IsNullOrEmpty(_iconOriginalSortingLayer))
                     iconRenderer.sortingLayerName = _iconOriginalSortingLayer;
                 iconRenderer.sortingOrder = _iconOriginalSortingOrder;
@@ -244,18 +333,21 @@ namespace TileMatch.Views
 
         private void KillAllTweens()
         {
-            DOTween.Kill(TweenIdTap);
-            DOTween.Kill(TweenIdMove);
-            DOTween.Kill(TweenIdScale);
-            DOTween.Kill(TweenIdGrow);
-            if (iconRenderer != null) iconRenderer.DOKill();
             transform.DOKill();
+            if (iconRenderer != null)
+            {
+                iconRenderer.transform.DOKill();
+                iconRenderer.DOKill();
+            }
         }
 
         private void Unsubscribe()
         {
             if (_model != null)
+            {
                 _model.OnBlockedChanged -= HandleBlockedChanged;
+                _model.OnLayerChanged -= HandleLayerChanged;
+            }
             _model = null;
         }
 

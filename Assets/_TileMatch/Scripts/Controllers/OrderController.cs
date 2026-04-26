@@ -87,18 +87,19 @@ namespace TileMatch.Controllers
             _activeOrders.Remove(completed);
 
             // Promote the next queued order into the freed slot (if any).
+            OrderModel next = null;
             if (_queue.Count > 0 && slotIndex >= 0)
             {
-                var next = _queue.Dequeue();
+                next = _queue.Dequeue();
                 _activeOrders.Add(next);
                 next.OnCompleted += () => OnOrderCompleted(next);
-                if (orderView != null) orderView.ShowOrder(slotIndex, next);
+            }
+
+            if (slotIndex >= 0 && orderView != null)
+                orderView.AnimateCompleteAndShow(slotIndex, next);
+
+            if (next != null)
                 OnOrderActivated?.Invoke(next);
-            }
-            else if (slotIndex >= 0 && orderView != null)
-            {
-                orderView.ClearSlot(slotIndex);
-            }
 
             // Win check.
             if (_queue.Count == 0 && _activeOrders.Count == 0)

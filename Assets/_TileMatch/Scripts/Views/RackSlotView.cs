@@ -1,3 +1,5 @@
+using System;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 using TileMatch.Data;
@@ -53,6 +55,26 @@ namespace TileMatch.Views
         {
             if (icon != null) return icon.transform.position;
             return transform.position;
+        }
+
+        /// <summary>
+        /// Fly the icon to <paramref name="worldTarget"/>, then clear the slot
+        /// and restore the icon's local position so the next Fill renders in place.
+        /// </summary>
+        public void AnimateIconTo(Vector3 worldTarget, float duration, Action onArrive)
+        {
+            if (icon == null) { onArrive?.Invoke(); return; }
+
+            var t = icon.transform;
+            var originalLocal = t.localPosition;
+            t.DOKill();
+            t.DOMove(worldTarget, duration).SetEase(Ease.InOutQuad)
+                .OnComplete(() =>
+                {
+                    ClearSlot();
+                    t.localPosition = originalLocal;
+                    onArrive?.Invoke();
+                });
         }
     }
 }
