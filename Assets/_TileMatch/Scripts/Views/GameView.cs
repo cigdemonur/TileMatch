@@ -46,6 +46,11 @@ namespace TileMatch.Views
         [Tooltip("Format string used for the level label. {0} is the level number.")]
         [SerializeField] private string levelLabelFormat = "Level {0}";
 
+        [Tooltip("Label on the Fail panel, e.g. 'Level 3 Failed'. Optional.")]
+        [SerializeField] private TMP_Text failLevelLabel;
+        [Tooltip("Format string used for the Fail panel label. {0} is the current level number.")]
+        [SerializeField] private string failLevelLabelFormat = "Level {0} Failed";
+
         private GameController _game;
 
         /// <summary>Called by GameController in Awake/Start after the controller wakes.</summary>
@@ -80,6 +85,8 @@ namespace TileMatch.Views
         {
             if (levelLabel != null)
                 levelLabel.text = string.Format(levelLabelFormat, levelNumber);
+            if (failLevelLabel != null)
+                failLevelLabel.text = string.Format(failLevelLabelFormat, levelNumber);
         }
 
         private void HandleStateChanged(GameState state)
